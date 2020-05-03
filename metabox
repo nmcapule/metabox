@@ -127,7 +127,7 @@ function hash() {
 
     local sum=`{
         export LC_ALL=C;
-        echo $target;
+        # echo $target;
         find -type f -exec wc -c {} \; | sort; echo;
         find -type f -exec $hasher {} + | sort; echo;
         find . -type d | sort; find . -type d | sort | $hasher;
@@ -153,13 +153,24 @@ function archive() {
 }
 
 function unarchive() {
-    mkdir -p $BACKUP_DIR
-    tar xzf "$HASHED_DIR/$1.tar.gz" -C "$BACKUP_DIR"
+    if ! [ -z $2 ]; then
+        rm -rf "$BACKUP_DIR/$2"
+        mkdir -p "$BACKUP_DIR/$2"
+        tar xzf "$HASHED_DIR/$1.tar.gz" -C "$BACKUP_DIR/$2" --strip-components 1
+    else
+        mkdir -p $BACKUP_DIR
+        tar xzf "$HASHED_DIR/$1.tar.gz" -C "$BACKUP_DIR"
+    fi
 }
 
+# Setup.
+touch $RECORDS_DB
+
+# Get command.
 CMD=$1
 shift
 
+# Select command.
 case $CMD in
     "hash")
         hash $@
