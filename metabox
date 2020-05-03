@@ -4,6 +4,21 @@ readonly HASHED_DIR="archives"
 readonly BACKUP_DIR="data"
 readonly RECORDS_DB="versions.txt"
 
+readonly AWS_CLI="docker run --rm -v $(pwd):/app --env-file .env -it amazon/aws-cli:latest"
+
+# Set overrideable s3 destinations.
+AWS_S3_BUCKET="default"
+AWS_S3_PREFIX="prefix"
+set -a; source .env; set +a
+
+function upload_to_s3() {
+    $AWS_CLI s3 cp "/app/$HASHED_DIR/$1.tar.gz" "s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/"
+}
+
+function download_from_s3() {
+    $AWS_CLI s3 cp "s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/$1.tar.gz" "/app/$HASHED_DIR/$1.tar.gz"
+}
+
 # RECORD struct
 #   hash        (hash ./target)
 #   timestamp   (date +%s)
@@ -150,10 +165,13 @@ function archive() {
     
     tar cvzf "$HASHED_DIR/$sum.tar.gz" $target
     record_create $sum $(date +%s) $(git config --global user.email) $2
+
+    echo $sum
 }
 
 function unarchive() {
-    local filename="$BACKUP_DIR/$1.tar.gz"
+    local sum="$1"
+    local filename="$HASHED_DIR/$sum.tar.gz"
     if ! [ -f "$filename" ]; then
         echo "File not found: $filename"
         exit 1
@@ -167,6 +185,8 @@ function unarchive() {
         mkdir -p $BACKUP_DIR
         tar xzf "$filename" -C "$BACKUP_DIR"
     fi
+
+    echo $sum
 }
 
 # Setup.
@@ -188,18 +208,10 @@ case $CMD in
         unarchive $@
         ;;
     "push")
-        echo "push"
-        archive $@
-        # TODO(nmcapule@gmail.com): Implement.
-        # push gz to S3
+        archive $@ && upload_to_s3 $(hash $1)
         ;;
     "pull")
-        echo "pull"
-        # TODO(nmcapule@gmail.com): Implement.
-        # check if hash already exists in HASHED_DIR
-        #   no)
-        #       pull gz from S3
-        unarchive $@
+        download_from_s3 $1 && unarchive $@
         ;;
     "list")
         # print all from RECORDS_DB
