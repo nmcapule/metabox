@@ -10,18 +10,22 @@ AWS_S3_PREFIX="prefix"
 # If found on .env, override the variables declared above.
 set -a; source .env; set +a
 
-readonly AWS_CLI="docker run --rm -v $(pwd)/$LOCAL_ARCHIVES_DIR:/archives -u $(id -u):$(id -g) --env-file .env -it amazon/aws-cli:latest"
+readonly AWS_CLI="docker run --rm -v $(pwd)/$LOCAL_ARCHIVES_DIR:/$AWS_S3_PREFIX -u $(id -u):$(id -g) --env-file .env -it amazon/aws-cli:latest"
+
+# Reset AWS archives.
+# $AWS_CLI s3 rm "s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX" --recursive
+# exit 1
 
 function list_s3_files() {
     $AWS_CLI s3 ls "s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/"
 }
 
 function upload_to_s3() {
-    $AWS_CLI s3 cp "/archives/$1.tar.gz" "s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/"
+    $AWS_CLI s3 cp "/$AWS_S3_PREFIX/$1.tar.gz" "s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/"
 }
 
 function download_from_s3() {
-    $AWS_CLI s3 cp "s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/$1.tar.gz" "/archives/$1.tar.gz"
+    $AWS_CLI s3 cp "s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/$1.tar.gz" "/$AWS_S3_PREFIX/$1.tar.gz"
 }
 
 # RECORD struct
