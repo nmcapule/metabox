@@ -1,7 +1,5 @@
 #!/bin/bash
 
-readonly AWS_CLI="docker run --rm -v $(pwd):/app -u $(id -u):$(id -g) --env-file .env -it amazon/aws-cli:latest"
-
 # Set overrideable local files and folders.
 LOCAL_ARCHIVES_DIR="archives"
 LOCAL_EXTRACTS_DIR="data"
@@ -12,12 +10,18 @@ AWS_S3_PREFIX="prefix"
 # If found on .env, override the variables declared above.
 set -a; source .env; set +a
 
+readonly AWS_CLI="docker run --rm -v $(pwd)/$LOCAL_ARCHIVES_DIR:/archives -u $(id -u):$(id -g) --env-file .env -it amazon/aws-cli:latest"
+
+function list_s3_files() {
+    $AWS_CLI s3 ls "s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/"
+}
+
 function upload_to_s3() {
-    $AWS_CLI s3 cp "/app/$LOCAL_ARCHIVES_DIR/$1.tar.gz" "s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/"
+    $AWS_CLI s3 cp "/archives/$1.tar.gz" "s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/"
 }
 
 function download_from_s3() {
-    $AWS_CLI s3 cp "s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/$1.tar.gz" "/app/$LOCAL_ARCHIVES_DIR/$1.tar.gz"
+    $AWS_CLI s3 cp "s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/$1.tar.gz" "/archives/$1.tar.gz"
 }
 
 # RECORD struct
@@ -25,6 +29,7 @@ function download_from_s3() {
 #   timestamp   (date +%s)
 #   creator     (git config --global user.email)
 #   tags        (<comma-delimited array of strings>)
+#               helper: git rev-parse --abbrev-ref HEAD
 #
 # For example,
 # 67dc74329181f3aaf1d304a4fc40c01c 1588448900 nmcapule@gmail.com development,master
@@ -140,10 +145,11 @@ function hash() {
 
     pushd $(pwd) > /dev/null
     cd $target
+    local folder=${target##*/}
 
     local sum=`{
         export LC_ALL=C;
-        # echo $target;
+        echo $folder;
         find -type f -exec wc -c {} \; | sort; echo;
         find -type f -exec $hasher {} + | sort; echo;
         find . -type d | sort; find . -type d | sort | $hasher;
@@ -163,8 +169,9 @@ function archive() {
 
     local sum=$(hash $target)
     mkdir -p $LOCAL_ARCHIVES_DIR
-    
-    tar cvzf "$LOCAL_ARCHIVES_DIR/$sum.tar.gz" $target
+    local folder=${target##*/}
+
+    tar cvzf "$LOCAL_ARCHIVES_DIR/$sum.tar.gz" -C $target/.. $folder
     record_create $sum $(date +%s) $(git config --global user.email) $2
 
     echo $sum
@@ -213,6 +220,9 @@ case $CMD in
         ;;
     "pull")
         download_from_s3 $1 && unarchive $@
+        ;;
+    "remotes")
+        list_s3_files
         ;;
     "list")
         # print all from LOCAL_RECORDS_DB
