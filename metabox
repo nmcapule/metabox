@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Set overrideable local files and folders.
-LOCAL_ARCHIVES_DIR="archives"
-LOCAL_EXTRACTS_DIR="data"
+LOCAL_ARCHIVES_DIR="data/archives"
+LOCAL_EXTRACTS_DIR="data/extracts"
 LOCAL_RECORDS_DB="versions.txt"
 # Set overrideable s3 destinations.
 AWS_S3_BUCKET="default"
@@ -203,6 +203,8 @@ function unarchive() {
 
 # Setup.
 touch $LOCAL_RECORDS_DB
+mkdir -p $LOCAL_ARCHIVES_DIR
+mkdir -p $LOCAL_EXTRACTS_DIR
 
 # Get command.
 CMD=$1
