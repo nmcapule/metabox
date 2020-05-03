@@ -1,22 +1,23 @@
 #!/bin/bash
 
-readonly HASHED_DIR="archives"
-readonly BACKUP_DIR="data"
-readonly RECORDS_DB="versions.txt"
+readonly AWS_CLI="docker run --rm -v $(pwd):/app -u $(id -u):$(id -g) --env-file .env -it amazon/aws-cli:latest"
 
-readonly AWS_CLI="docker run --rm -v $(pwd):/app --env-file .env -it amazon/aws-cli:latest"
-
+# Set overrideable local files and folders.
+LOCAL_ARCHIVES_DIR="archives"
+LOCAL_EXTRACTS_DIR="data"
+LOCAL_RECORDS_DB="versions.txt"
 # Set overrideable s3 destinations.
 AWS_S3_BUCKET="default"
 AWS_S3_PREFIX="prefix"
+# If found on .env, override the variables declared above.
 set -a; source .env; set +a
 
 function upload_to_s3() {
-    $AWS_CLI s3 cp "/app/$HASHED_DIR/$1.tar.gz" "s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/"
+    $AWS_CLI s3 cp "/app/$LOCAL_ARCHIVES_DIR/$1.tar.gz" "s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/"
 }
 
 function download_from_s3() {
-    $AWS_CLI s3 cp "s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/$1.tar.gz" "/app/$HASHED_DIR/$1.tar.gz"
+    $AWS_CLI s3 cp "s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/$1.tar.gz" "/app/$LOCAL_ARCHIVES_DIR/$1.tar.gz"
 }
 
 # RECORD struct
@@ -30,15 +31,15 @@ function download_from_s3() {
 
 function record_exists() {
     local sum=$1
-    return $(grep -q "^$sum " $RECORDS_DB)
+    return $(grep -q "^$sum " $LOCAL_RECORDS_DB)
 }
 function record_retrieve() {
     local sum=$1
-    echo $(grep "^$sum " $RECORDS_DB)
+    echo $(grep "^$sum " $LOCAL_RECORDS_DB)
 }
 function record_create() {
     record_exists "$1" && echo "Record already exists: $1" && exit
-    echo "$1 $2 $3 $4" >> $RECORDS_DB
+    echo "$1 $2 $3 $4" >> $LOCAL_RECORDS_DB
 }
 function record_get_tags() {
     # Converts comma into space, then let default IFS convert the
@@ -66,14 +67,14 @@ function array_contains () {
 function print_all_records() {
     while read line; do
         record_print $line
-    done <$RECORDS_DB
+    done <$LOCAL_RECORDS_DB
 }
 function latest_record_with_tag() {
     local record=""
     while read line; do
         local tags=$(record_get_tags $line)
         array_contains "$1" $tags && record=$line
-    done <$RECORDS_DB
+    done <$LOCAL_RECORDS_DB
     if [ -z "$record" ]; then
         return 1
     fi
@@ -98,7 +99,7 @@ function tag_record() {
     appended+=($2)
     local next_tags=$(local IFS=, ; echo "${appended[*]}")
 
-    sed -ri "s/^($1.+)$prev_tags$/\1$next_tags/g" $RECORDS_DB
+    sed -ri "s/^($1.+)$prev_tags$/\1$next_tags/g" $LOCAL_RECORDS_DB
 }
 function untag_record() {
     local record=$(record_retrieve "$1")
@@ -121,7 +122,7 @@ function untag_record() {
     done
     local next_tags=$(local IFS=, ; echo "${array[*]}")
 
-    sed -ri "s/^($1.+)$prev_tags$/\1$next_tags/g" $RECORDS_DB
+    sed -ri "s/^($1.+)$prev_tags$/\1$next_tags/g" $LOCAL_RECORDS_DB
 }
 
 function hash() {
@@ -161,9 +162,9 @@ function archive() {
     fi
 
     local sum=$(hash $target)
-    mkdir -p $HASHED_DIR
+    mkdir -p $LOCAL_ARCHIVES_DIR
     
-    tar cvzf "$HASHED_DIR/$sum.tar.gz" $target
+    tar cvzf "$LOCAL_ARCHIVES_DIR/$sum.tar.gz" $target
     record_create $sum $(date +%s) $(git config --global user.email) $2
 
     echo $sum
@@ -171,26 +172,26 @@ function archive() {
 
 function unarchive() {
     local sum="$1"
-    local filename="$HASHED_DIR/$sum.tar.gz"
+    local filename="$LOCAL_ARCHIVES_DIR/$sum.tar.gz"
     if ! [ -f "$filename" ]; then
         echo "File not found: $filename"
         exit 1
     fi
 
     if ! [ -z $2 ]; then
-        rm -rf "$BACKUP_DIR/$2"
-        mkdir -p "$BACKUP_DIR/$2"
-        tar xzf "$filename" -C "$BACKUP_DIR/$2" --strip-components 1
+        rm -rf "$LOCAL_EXTRACTS_DIR/$2"
+        mkdir -p "$LOCAL_EXTRACTS_DIR/$2"
+        tar xzf "$filename" -C "$LOCAL_EXTRACTS_DIR/$2" --strip-components 1
     else
-        mkdir -p $BACKUP_DIR
-        tar xzf "$filename" -C "$BACKUP_DIR"
+        mkdir -p $LOCAL_EXTRACTS_DIR
+        tar xzf "$filename" -C "$LOCAL_EXTRACTS_DIR"
     fi
 
     echo $sum
 }
 
 # Setup.
-touch $RECORDS_DB
+touch $LOCAL_RECORDS_DB
 
 # Get command.
 CMD=$1
@@ -214,7 +215,7 @@ case $CMD in
         download_from_s3 $1 && unarchive $@
         ;;
     "list")
-        # print all from RECORDS_DB
+        # print all from LOCAL_RECORDS_DB
         print_all_records
         ;;
     "tagged")
