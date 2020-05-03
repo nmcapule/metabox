@@ -153,13 +153,19 @@ function archive() {
 }
 
 function unarchive() {
+    local filename="$BACKUP_DIR/$1.tar.gz"
+    if ! [ -f "$filename" ]; then
+        echo "File not found: $filename"
+        exit 1
+    fi
+
     if ! [ -z $2 ]; then
         rm -rf "$BACKUP_DIR/$2"
         mkdir -p "$BACKUP_DIR/$2"
-        tar xzf "$HASHED_DIR/$1.tar.gz" -C "$BACKUP_DIR/$2" --strip-components 1
+        tar xzf "$filename" -C "$BACKUP_DIR/$2" --strip-components 1
     else
         mkdir -p $BACKUP_DIR
-        tar xzf "$HASHED_DIR/$1.tar.gz" -C "$BACKUP_DIR"
+        tar xzf "$filename" -C "$BACKUP_DIR"
     fi
 }
 
@@ -182,26 +188,18 @@ case $CMD in
         unarchive $@
         ;;
     "push")
-        # hash target folder
-        # check if hash already exists in HASHED_DIR
-        #   yes)
-        #       warn user that hash already exist
-        #       check if want to force push?
-        #           no) exit
-        #   no)
-        #       targz target folder
-        # check if entry already exists in RECORDS_DB
-        #   no)
-        #       add entry to RECORDS_DB
-        # push gz to S3
         echo "push"
+        archive $@
+        # TODO(nmcapule@gmail.com): Implement.
+        # push gz to S3
         ;;
     "pull")
+        echo "pull"
+        # TODO(nmcapule@gmail.com): Implement.
         # check if hash already exists in HASHED_DIR
         #   no)
         #       pull gz from S3
-        # extract gz to BACKUP_DIR
-        echo "pull"
+        unarchive $@
         ;;
     "list")
         # print all from RECORDS_DB
